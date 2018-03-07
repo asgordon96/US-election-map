@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>D3 Test</title>
+        <script src="https://d3js.org/d3.v4.js"></script>
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
+        <script type="text/javascript" src="state_locations.js"></script> 
+        <script type="text/javascript">
+          var width = 1000;
+          var height = 500;
+
+          // setup the grid of rectangles
+          var rect_width = 60;
+          var rect_height = 45;
+          var margin_top = 120;
+          var margin_left = 25;
+
+          // a global variable for the current year we are showing
+          window.current_year = "2016";
+
+          // colorscale from colorbrewer2.org
+          // start with light, goes to dark
+          var reds = ['#fcbba1','#fc9272','#fb6a4a','#ef3b2c','#cb181d','#99000d'];
+          var blues = ['#c6dbef','#9ecae1','#6baed6','#4292c6','#2171b5','#084594'];
+
+          // colors goes dark red to dark blue
+          // referenced the site
+          // https://stackoverflow.com/questions/30610523/reverse-array-in-javascript-without-mutating-original-array
+          // for how to reverse the array without mutating it
+          var colors = Array.prototype.concat(reds.slice().reverse(), blues);
+          var text_fill = "#FFF";
+
+          function process_data(data) {
+            var voting_data = {}
+            for (var i = 0; i < data.length; i++) {
+              var row = data[i];
+              if (row.Abbreviation in voting_data) {
+                voting_data[row.Abbreviation][row.Year] = row;
+              }
+              else {
+                var state = {}
+                state[row.Year] = row;
+                voting_data[row.Abbreviation] = state;
+              }
+            }
+            return Object.values(voting_data);
+          }
+
+          // given the row and column (starting at 0) in the grid, return the (x, y)
+          // of the upper left hand corner
+          function get_x_coord(column) {
+            return column * rect_width + margin_left;
+          }
+
+          function get_y_coord(row) {
+            return row * rect_height + margin_top;
+          }
+
+          // create title
+          d3.select("body").append("h2").text("U.S. Presidential Elections: 1940 - 2016");
+
+          // create the main svg canvas
+          var svg = d3.select("body").append("svg").attr("width", width).attr("height", height);
+
+          // create the legend color scale
+          var scale_width = 600;
+          var scale_height = 10;
+          var scale_start_x = 100;
+          var scale_y = 70;
+          var bar_width = scale_width / colors.length;
+          var colorscale_x = d3.scaleLinear().domain([0, colors.length - 1])
+                                             .range([scale_start_x, scale_start_x + scale_width - bar_width]);
+
+          // draw the legend colorscale
+          svg.selectAll("rect.colorscale").data(colors).enter().append("rect")
+            .attr("width", bar_width)
+            .attr("height", scale_height)
+            .attr("y", scale_y)
+            .attr("x", function(d, i) {
+              return colorscale_x(i);
+            })
+            .attr("fill", function(d) { return d; })
+
+          // and the text labels for it
+          svg.selectAll("text.colorscale").data(colors).enter().append("text")
+            .text(function(d, i) {
+              var offset = colors.length / 2;
+              var start = (i - offset) * 10;
+              var end = (i - offset + 1) * 10;
+              if (start == -60) {
+                start = -100;
+              }
+              if (end == 60) {
+                end = 100;
+              }
+              return start + " to " + end;
+            })
+            .attr("x", function(d, i) {
+              return colorscale_x(i) + bar_width / 2;
+            })
+            .attr("y", scale_y + 25)
+            .attr("class", "colorscale");
+
+          // image tag for showing president's photo
+          var image = svg.append("image").attr("x", 800).attr("y", 100).attr("width", 150);
+
+          // update the image given the window.current_year variable
+          function update_image() {
+            var filename = "images/" + images[window.current_year];
+            image.attr("href", filename);
+          }
+
+          update_image();
+
+          // div for tooltip
+          var tooltip = d3.select("body").append("div").attr("class", "tooltip");
+          var tooltip_state = tooltip.append("h3");
+          var tooltip_list = tooltip.append("ul");
+          var tooltip_line1 = tooltip_list.append("li");
+          var tooltip_line2= tooltip_list.append("li");
+          var tooltip_line3  = tooltip_list.append("li");
+
+          // d is a single data object
+          // call this function to show the tooltip for this state
+          function on_mouseover(d) {
+              // get the strings to display from the data d
+              var state = d.State;
+              var ev = "Electoral Votes: " + d.Total_EV;
+              var dem_text = d.D_Nominee + ": " + d.D_Votes + " (" + d.D_Percentage + "%)";
+              var rep_text = d.R_Nominee + ": " + d.R_Votes + " (" + d.R_Percentage + "%)";
+
+              // set the tooltip text
+              tooltip_state.text(state);
+              tooltip_line1.text(ev);
+              tooltip_line2.text(dem_text);
+              tooltip_line3.text(rep_text);
+              tooltip.style("display", "block"); // make the tooltip div visible
+
+              // position the tooltip correctly
+              var x = d3.event.pageX + "px";
+              var y = d3.event.pageY + "px";
+              tooltip.style("left", x).style("top", y);
+          }
+
+          // set the attributes for a selection of rectangles that are bound to the state 
+          // voting data
+          function set_attributes(selection) {
+            selection.attr("height", rect_height)
+              .attr("width", rect_width)
+              .attr("stroke", "black")
+              .attr("stroke-width", 1)
+              .attr("opacity", function(d) {
+                if (window.current_year in d) {
+                  return 1;
+                }
+                else {
+                  return 0; // don't show the rectangle if the state doesn't exist in this year
+                }
+              })
+              .attr("x", function(d) {
+                if (window.current_year in d) {
+                  var d = d[window.current_year];
+                  return get_x_coord(state_locations[d.Abbreviation].col);
+                }
+              })
+              .attr("y", function(d) {
+                if (window.current_year in d) {
+                  var d = d[window.current_year];
+                  return get_y_coord(state_locations[d.Abbreviation].row);
+                }
+              })
+              .attr("fill", function(d) {
+                if (!(window.current_year in d)) {
+                  return "white";
+                }
+                var d = d[window.current_year];
+                var dem_margin = parseFloat(d.D_Percentage) - parseFloat(d.R_Percentage);
+                if (dem_margin > 0) {
+                  // bins of width 10
+                  var color_index = Math.floor(dem_margin / 10.0);
+                  if (color_index >= blues.length) {
+                    color_index = blues.length - 1;
+                  }
+                  return blues[color_index]
+                }
+                else {
+                  var color_index = Math.floor(-dem_margin / 10.0)
+                  if (color_index >= reds.length) {
+                    color_index = reds.length - 1;
+                  }
+                  return reds[color_index];
+                }
+              })
+              .on("mouseover", function(d) {
+                if (window.current_year in d) {
+                  on_mouseover(d[window.current_year]);
+                }
+              })
+              .on("mouseout", function(d) {
+                if (window.current_year in d) {
+                  // when leaving a state, make the tooltip invisible
+                  tooltip.style("display", "none");
+                }      
+              })
+          }
+
+          // given the selection of text boxes, update the state abbreviation attributes
+          function set_abbreviation_attr(selection) {
+              selection.attr("text-anchor", "middle")
+                .attr("fill", text_fill)
+                .text(function(d) {
+                  if (window.current_year in d) {
+                    return d[window.current_year].Abbreviation;
+                  }
+                })
+                .attr("x", function(d) {
+                  if (window.current_year in d) {
+                    return get_x_coord(state_locations[d[window.current_year].Abbreviation].col) + rect_width / 2;
+                  }
+                })
+                .attr("y", function(d) {
+                  if (window.current_year in d) {
+                    return get_y_coord(state_locations[d[window.current_year].Abbreviation].row) + rect_height / 2 - 3;
+                  }
+                })
+                .on("mouseover", function(d) {
+                  if (window.current_year in d) {
+                    on_mouseover(d[window.current_year]);
+                  }
+                })
+                .on("mouseout", function(d) {
+                  tooltip.style("div", "none");
+                })
+          }
+
+          // given the text selection for electoral votes
+          // update all the attributes
+          function set_electoral_attr(selection) {
+            selection.attr("text-anchor", "middle")
+                .attr("fill", text_fill)
+                .text(function(d) {
+                  if (window.current_year in d) {
+                    return d[window.current_year].Total_EV;
+                  }
+                })
+                .attr("x", function(d) {
+                  if (window.current_year in d) {
+                    return get_x_coord(state_locations[d[window.current_year].Abbreviation].col) + rect_width / 2;
+                  }
+                })
+                .attr("y", function(d) {
+                  if (window.current_year in d) {
+                    return get_y_coord(state_locations[d[window.current_year].Abbreviation].row) + rect_height * 0.82;
+                  }
+                })
+                .on("mouseover", function(d) {
+                  if (window.current_year in d) {
+                    on_mouseover(d[window.current_year]);
+                  }
+                })
+                .on("mouseout", function(d) {
+                  tooltip.style("div", "none");
+                })
+          }
+
+          d3.csv("data/data.csv", function(data) {
+              var data = process_data(data);
+              var rectangles = svg.selectAll("rect.states").data(data).enter().append("rect");
+              set_attributes(rectangles);
+
+              // d3 selection for creating the state abbreviation and electoral vote labels
+              var enter_text = svg.selectAll("text.states").data(data).enter();
+              var abbreviation_text = enter_text.append("text");
+              var electoral_text = enter_text.append("text");
+
+              // state abbreviations and electoral votes
+              set_abbreviation_attr(abbreviation_text);
+              set_electoral_attr(electoral_text);
+
+              // setup the years scale
+              window.year_scale = d3.scaleLinear().domain([1940, 2016]).range([margin_left, width - 100]);
+
+              d3.csv("data/yearwise-winner.csv", function(year_data) {
+                var year_text = svg.selectAll("text.year").data(year_data).enter().append("text")
+                  .text(function(d) { return d.YEAR; })
+                  .attr("text-anchor", "middle")
+                  .attr("x", function(d) {
+                    return year_scale(parseInt(d.YEAR));
+                  })
+                  .attr("y", 15)
+                  .attr("class", function(d) {
+                    if (d.YEAR == window.current_year) { return "current-year"; }
+                    else { return "year"; }
+                  });
+
+                svg.selectAll("circle").data(year_data).enter().append("circle")
+                  .attr("r", function(d) {
+                    // draw larger if this year is selected
+                    if (d.YEAR == window.current_year) {
+                      return 12;
+                    }
+                    else {
+                      return 8;
+                    }
+                  })
+                  .attr("cx", function(d) {
+                    return year_scale(parseInt(d.YEAR));
+                  })
+                  .attr("cy", 35)
+                  .attr("fill", function(d) {
+                    if (d.PARTY == "D") {
+                      return "blue";
+                    }
+                    else { return "red"; }
+                  })
+                  // when the user clicks on the circle corresponding to a year
+                  // change the global window.current_year variable and update (redraw) the map
+                  .on("click", function(d) {
+                    window.current_year = d.YEAR;
+                    set_attributes(rectangles);
+                    set_abbreviation_attr(abbreviation_text);
+                    set_electoral_attr(electoral_text);
+
+                    d3.selectAll("circle").attr("r", 8);
+                    d3.select(this).attr("r", 12);
+                    update_image();
+                    year_text.attr("class", function(d) {
+                      if (d.YEAR == window.current_year) { return "current-year"; }
+                      else { return "year"; }
+                    });
+                  })
+                  .on("mouseover", function(d) {
+                    d3.select(this).attr("r", 12);
+                  })
+                  .on("mouseout", function(d) {
+                    if (window.current_year != d.YEAR) {
+                      d3.select(this).attr("r", 8);
+                    }
+                  })
+              })
+          })
+        </script>
+    </body>
+</html>
