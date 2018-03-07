@@ -105,7 +105,10 @@
             .attr("class", "colorscale");
 
           // image tag for showing president's photo
-          var image = svg.append("image").attr("x", 800).attr("y", 100).attr("width", 150);
+          var image = svg.append("image").attr("x", 800).attr("y", 100)
+           .attr("width", "150px")
+           .attr("height", "150px")
+           .attr("preserveAspectRatio", "xMinYmin");
 
           // update the image given the window.current_year variable
           function update_image() {
